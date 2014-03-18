@@ -4,9 +4,9 @@ import socks
 import socket
 import random
 
-
-socks.set_default_proxy(socks.SOCKS4, "localhost")
-socket.socket = socks.socksocket
+# Uncomment to connect through a SOCKS4 proxy
+#socks.set_default_proxy(socks.SOCKS4, "localhost")
+#socket.socket = socks.socksocket
 
 KEYSTONE_URL = 'http://172.16.0.2:5000/v3'
 NEUTRON_URL = 'http://172.16.0.2:9696/v2.0'
