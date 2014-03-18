@@ -227,6 +227,10 @@ def create_instance(token, tenant_id, flavor, image, name, network_id):
     return json.loads(resp.text)
 
 
+def get_instance(token, tenant_id, instance_id):
+    resp = requests.get('{}/{}/servers/{}'.format(NOVA_URL, tenant_id, instance_id), headers=auth_headers(token))
+    return json.loads(resp.text)
+
 
 
 suffix = repr(random.random())[2:]
@@ -298,3 +302,6 @@ print 'KEYPAIR NAME: {}'.format(keypair_name)
 # Create instance
 instance_id = create_instance(token, project_id, FLAVOR_ID, IMAGE_ID, INSTANCE, network_id)['server']['id']
 print 'INSTANCE ID: {}'.format(instance_id)
+
+# Show instance details
+print get_instance(token, project_id, instance_id)
