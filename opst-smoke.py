@@ -3,23 +3,26 @@ import requests
 import socks
 import socket
 import random
+import time
+
 
 # Uncomment to connect through a SOCKS4 proxy
-#socks.set_default_proxy(socks.SOCKS4, "localhost")
-#socket.socket = socks.socksocket
+socks.set_default_proxy(socks.SOCKS4, "localhost")
+socket.socket = socks.socksocket
+
 
 KEYSTONE_URL = 'http://172.16.0.2:5000/v3'
 NEUTRON_URL = 'http://172.16.0.2:9696/v2.0'
 NOVA_URL = 'http://172.16.0.2:8774/v2'
 GLANCE_URL = ''
-CINDER_URL = ''
+CINDER_URL = 'http://172.16.0.2:8776/v1'
 
 ADMIN_USER = 'admin'
 ADMIN_PASSWORD = 'admin'
 ADMIN_TOKEN = 'VGMUUEkN'
 
-EXTERNAL_NETWORK_ID = '282a5fd5-cbca-4f23-b287-40bb1d37192e'
-IMAGE_ID = '8375a760-8724-4f7f-ba12-ed7d20691b8a'
+EXTERNAL_NETWORK_ID = '542787ef-186a-4d37-9b3d-68b8f23cbfec'
+IMAGE_ID = '10758a3d-e0a0-43eb-b93d-fbc054686e98'
 FLAVOR_ID = '1'
 
 HEADERS = {'Accept': 'application/json', 'Content-type': 'application/json'}
@@ -232,6 +235,31 @@ def get_instance(token, tenant_id, instance_id):
     return json.loads(resp.text)
 
 
+def create_volume(token, tenant_id, name, size):
+    body = \
+        {
+            'volume': {
+                'display_name': name,
+                'size': size
+            }
+        }
+
+    resp = requests.post('{}/{}/volumes'.format(CINDER_URL, tenant_id), json.dumps(body), headers=auth_headers(token))
+    return json.loads(resp.text)
+
+
+def attach_volume(token, tenant_id, instance_id, volume_id):
+    body = \
+        {
+            'volumeAttachment': {
+                'volumeId': volume_id
+            }
+        }
+
+    resp = requests.post('{}/{}/servers/{}/os-volume_attachments'.format(NOVA_URL, tenant_id, instance_id), json.dumps(body), headers=auth_headers(token))
+    return json.loads(resp.text)
+
+
 
 suffix = repr(random.random())[2:]
 
@@ -305,3 +333,14 @@ print 'INSTANCE ID: {}'.format(instance_id)
 
 # Show instance details
 print get_instance(token, project_id, instance_id)
+
+# Create volume
+volume_id = create_volume(token, project_id, VOLUME, 2)['volume']['id']
+print 'VOLUME ID: {}'.format(volume_id)
+
+# Wait for the instance to finish building
+time.sleep(10)
+
+# Attach volume to instance
+volume_attach_response = attach_volume(token, project_id, instance_id, volume_id)
+print volume_attach_response
