@@ -2,6 +2,7 @@ import json
 import requests
 import socks
 import socket
+import random
 
 
 socks.set_default_proxy(socks.SOCKS4, "localhost")
@@ -9,7 +10,7 @@ socket.socket = socks.socksocket
 
 KEYSTONE_URL = 'http://172.16.0.2:5000/v3'
 NEUTRON_URL = 'http://172.16.0.2:9696/v2.0'
-NOVA_URL = ''
+NOVA_URL = 'http://172.16.0.2:8774/v2'
 GLANCE_URL = ''
 CINDER_URL = ''
 
@@ -19,6 +20,7 @@ ADMIN_TOKEN = 'VGMUUEkN'
 
 EXTERNAL_NETWORK_ID = '282a5fd5-cbca-4f23-b287-40bb1d37192e'
 IMAGE_ID = '8375a760-8724-4f7f-ba12-ed7d20691b8a'
+FLAVOR_ID = '1'
 
 HEADERS = {'Accept': 'application/json', 'Content-type': 'application/json'}
 
@@ -154,11 +156,13 @@ def create_network(token, name):
 
 
 def create_subnet(token, network_id):
+    ip = ".".join(map(str, (random.randint(0, 255) for _ in range(3))))
+    cidr = '{}.0/24'.format(ip)
     body = \
         {
             'subnet': {
                 'ip_version': 4,
-                'cidr': '90.91.92.0/24',
+                'cidr': cidr,
                 'network_id': network_id
             }
         }
@@ -192,47 +196,105 @@ def add_router_interface(token, router_id, subnet_id):
     return json.loads(resp.text)
 
 
+def create_keypair(token, tenant_id, name):
+    body = \
+        {
+            'keypair': {
+                'name': name
+            }
+        }
 
-DOMAIN = 'my_dom_98'
-PROJECT = 'my_proj_98'
-USER = 'my_usr_98'
-NETWORK = 'my_net_98'
-ROUTER = 'my_router_98'
-SSH_KEY = 'my_key_98'
-INSTANCE = 'my_instance_98'
-VOLUME = 'my_volume_98'
+    resp = requests.post('{}/{}/os-keypairs'.format(NOVA_URL, tenant_id), json.dumps(body), headers=auth_headers(token))
+    return json.loads(resp.text)
 
+
+def create_instance(token, tenant_id, flavor, image, name, network_id):
+    body = \
+        {
+            'server': {
+                'flavorRef': flavor,
+                'imageRef': image,
+                'name': name,
+                'networks': [
+                    {
+                        'uuid': network_id
+                    }
+                ]
+            }
+        }
+
+    resp = requests.post('{}/{}/servers'.format(NOVA_URL, tenant_id), json.dumps(body), headers=auth_headers(token))
+    return json.loads(resp.text)
+
+
+
+
+suffix = repr(random.random())[2:]
+
+DOMAIN   = 'my_doma_{}'.format(suffix)
+PROJECT  = 'my_proj_{}'.format(suffix)
+USER     = 'my_user_{}'.format(suffix)
+NETWORK  = 'my_netw_{}'.format(suffix)
+ROUTER   = 'my_rout_{}'.format(suffix)
+KEYPAIR  = 'my_keyp_{}'.format(suffix)
+INSTANCE = 'my_inst_{}'.format(suffix)
+VOLUME   = 'my_volu_{}'.format(suffix)
+
+print \
+    'DOMAIN: {}\n' \
+    'PROJECT: {}\n' \
+    'USER: {}\n' \
+    'PASSWORD: 123qwe\n' \
+    'NETWORK: {}\n' \
+    'ROUTER: {}\n' \
+    'KEYPAIR: {}\n' \
+    'INSTANCE: {}\n' \
+    'VOLUME: {}\n'.format(DOMAIN, PROJECT, USER, NETWORK, ROUTER, KEYPAIR, INSTANCE, VOLUME)
+
+# Create domain
 domain_id = create_domain(DOMAIN)['domain']['id']
 print 'DOMAIN ID: {}'.format(domain_id)
 
+# Create project
 project_id = create_project(PROJECT, domain_id)['project']['id']
 print 'PROJECT ID: {}'.format(project_id)
 
+# Create user
 user_id = create_user(USER, '123qwe', domain_id, PROJECT)['user']['id']
 print 'USER ID: {}'.format(user_id)
 
+# Assign role to user
 roles = get_roles()['roles']
 for role in roles:
     if role['name'] == '_member_':
         member_role_id = role['id']
 print 'MEMBER ROLE ID: {}'.format(member_role_id)
-
 grant_user_role_in_project(project_id, user_id, member_role_id)
 
+# Get token
 token = get_token(USER, '123qwe', DOMAIN, PROJECT)['x-subject-token']
 print 'TOKEN: {}'.format(token)
 
+# Create network
 network_id = create_network(token, NETWORK)['network']['id']
 print 'NETWORK ID: {}'.format(network_id)
 
-subnet_id = create_subnet('fbd38d1ee7f4497db6012cd7908d10c3', 'd47a3be5-3b43-4f5f-86ff-e97ecc8375d6')['subnet']['id']
+# Create subnet
+subnet_id = create_subnet(token, network_id)['subnet']['id']
 print 'SUBNET_ID: {}'.format(subnet_id)
 
-router_id = create_router('fbd38d1ee7f4497db6012cd7908d10c3', ROUTER, EXTERNAL_NETWORK_ID)['router']['id']
+# Create router
+router_id = create_router(token, ROUTER, EXTERNAL_NETWORK_ID)['router']['id']
 print 'ROUTER_ID: {}'.format(router_id)
 
-interface_id = add_router_interface('fbd38d1ee7f4497db6012cd7908d10c3', '73d81578-0c59-4ae2-8bbd-93935f9dac20', '25959a9b-03e5-4e25-b4ba-63dec9a9e7f9')
+# Add router interface for internal network
+interface_id = add_router_interface(token, router_id, subnet_id)['id']
 print 'INTERFACE_ID: {}'.format(interface_id)
 
+# Create keypair
+keypair_name = create_keypair(token, project_id, KEYPAIR)['keypair']['name']
+print 'KEYPAIR NAME: {}'.format(keypair_name)
 
-
+# Create instance
+instance_id = create_instance(token, project_id, FLAVOR_ID, IMAGE_ID, INSTANCE, network_id)['server']['id']
+print 'INSTANCE ID: {}'.format(instance_id)
