@@ -171,11 +171,13 @@ def get_user_roles(token, user_id):
 
 
 def get_user_roles_in_project(token, project_id, user_id):
-    return service_request(KEYSTONE_URL, 'get', '/projects/{}/users/{}/roles'.format(project_id, user_id), auth_headers(token))
+    return service_request(KEYSTONE_URL, 'get', '/projects/{}/users/{}/roles'.format(project_id, user_id),
+                           auth_headers(token))
 
 
 def grant_user_role_in_project(token, project_id, user_id, role_id):
-    return service_request(KEYSTONE_URL, 'put', '/projects/{}/users/{}/roles/{}'.format(project_id, user_id, role_id), auth_headers(token))
+    return service_request(KEYSTONE_URL, 'put', '/projects/{}/users/{}/roles/{}'.format(project_id, user_id, role_id),
+                           auth_headers(token))
 
 
 def get_roles(token):
@@ -269,7 +271,8 @@ def add_router_interface(token, router_id, subnet_id):
         {
             'subnet_id': subnet_id
         }
-    return service_request(NEUTRON_URL, 'put', '/routers/{}/add_router_interface'.format(router_id), auth_headers(token), body)
+    return service_request(NEUTRON_URL, 'put', '/routers/{}/add_router_interface'.format(router_id),
+                           auth_headers(token), body)
 
 
 def delete_router_interface(token, router_id, subnet_id):
@@ -277,7 +280,8 @@ def delete_router_interface(token, router_id, subnet_id):
         {
             'subnet_id': subnet_id
         }
-    return service_request(NEUTRON_URL, 'put', '/routers/{}/remove_router_interface'.format(router_id), auth_headers(token), body)
+    return service_request(NEUTRON_URL, 'put', '/routers/{}/remove_router_interface'.format(router_id),
+                           auth_headers(token), body)
 
 
 # NOVA
@@ -330,7 +334,8 @@ def attach_volume(token, project_id, instance_id, volume_id):
                           ''
             }
         }
-    return service_request(NOVA_URL, 'post', '/{}/servers/{}/os-volume_attachments'.format(project_id, instance_id), auth_headers(token), body)
+    return service_request(NOVA_URL, 'post', '/{}/servers/{}/os-volume_attachments'.format(project_id, instance_id),
+                           auth_headers(token), body)
 
 
 # CINDER
