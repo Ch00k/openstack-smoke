@@ -45,7 +45,7 @@ def service_request(service_endpoint, method, path, headers, body=None):
     response_log = '=== R E S P O N S E ===\n' \
                    'CODE:    {}\n' \
                    'HEADERS: {}\n' \
-                   'BODY:    {}\n'.format(resp.status_code, resp.headers, resp.text)
+                   'BODY:    {}\n'.format(resp.status_code, dict(resp.headers), resp.text)
     if resp.status_code > 300:
         print(Fore.RED + response_log + Fore.RESET)
     else:
