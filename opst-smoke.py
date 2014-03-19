@@ -111,6 +111,16 @@ def create_domain(token, name):
     return service_request(KEYSTONE_URL, 'post', '/domains', auth_headers(token), body)
 
 
+def disable_domain(token, domain_id):
+    body = \
+        {
+            'domain': {
+                'enabled': False
+            }
+        }
+    return service_request(KEYSTONE_URL, 'patch', '/domains/{}'.format(domain_id), auth_headers(token), body)
+
+
 def delete_domain(token, domain_id):
     return service_request(KEYSTONE_URL, 'delete', '/domains/{}'.format(domain_id), auth_headers(token))
 
@@ -420,4 +430,5 @@ delete_subnet(token, subnet_id)
 delete_network(token, network_id)
 delete_user(ADMIN_TOKEN, user_id)
 delete_project(ADMIN_TOKEN, project_id)
+disable_domain(ADMIN_TOKEN, domain_id)
 delete_domain(ADMIN_TOKEN, domain_id)
