@@ -1,12 +1,14 @@
 import json
 import requests
-import socks
-import socket
 import random
 import time
 
+from colorama import Fore
+
 
 # Uncomment to connect through a SOCKS4 proxy
+import socks
+import socket
 socks.set_default_proxy(socks.SOCKS4, "localhost")
 socket.socket = socks.socksocket
 
@@ -14,18 +16,47 @@ socket.socket = socks.socksocket
 KEYSTONE_URL = 'http://172.16.0.2:5000/v3'
 NEUTRON_URL = 'http://172.16.0.2:9696/v2.0'
 NOVA_URL = 'http://172.16.0.2:8774/v2'
-GLANCE_URL = ''
 CINDER_URL = 'http://172.16.0.2:8776/v1'
 
 ADMIN_USER = 'admin'
 ADMIN_PASSWORD = 'admin'
 ADMIN_TOKEN = 'VGMUUEkN'
 
-EXTERNAL_NETWORK_ID = '542787ef-186a-4d37-9b3d-68b8f23cbfec'
-IMAGE_ID = '10758a3d-e0a0-43eb-b93d-fbc054686e98'
-FLAVOR_ID = '1'
+EXTERNAL_NETWORK_ID = '51942ec0-6dd2-4844-bd24-7a2dd3ed4f04'
+IMAGE_ID = 'c3d7a902-1d2e-4500-bd28-bfebdd3e5208'
+FLAVOR_ID = 'fb768565-5062-4fa7-8142-d103844f260d'
 
 HEADERS = {'Accept': 'application/json', 'Content-type': 'application/json'}
+
+
+def service_request(service_endpoint, method, path, headers, body=None):
+    print '=== R E Q U E S T ===\n' \
+          'METHOD:  {}\n' \
+          'URL:     {}\n' \
+          'HEADERS: {}'.format(method.upper(), service_endpoint + path, headers)
+    if body:
+        print 'BODY:    {}'.format(body) if body else None
+
+    if body:
+        resp = getattr(requests, method)('{}/{}'.format(service_endpoint, path), json.dumps(body), headers=headers)
+    else:
+        resp = getattr(requests, method)('{}/{}'.format(service_endpoint, path), headers=headers)
+
+    response_log = '=== R E S P O N S E ===\n' \
+                   'CODE:    {}\n' \
+                   'HEADERS: {}\n' \
+                   'BODY:    {}\n'.format(resp.status_code, resp.headers, resp.text)
+    if resp.status_code > 300:
+        print(Fore.RED + response_log + Fore.RESET)
+    else:
+        print(Fore.GREEN + response_log + Fore.RESET)
+
+    try:
+        resp_body = resp.json()
+    except ValueError:
+        resp_body = resp.text
+
+    return {'headers': resp.headers, 'body': resp_body}
 
 
 def auth_headers(token):
@@ -35,8 +66,7 @@ def auth_headers(token):
 
 
 def get_domains():
-    resp = requests.get('{}/domains'.format(KEYSTONE_URL), headers=auth_headers(ADMIN_TOKEN))
-    return json.loads(resp.text)
+    return service_request(KEYSTONE_URL, 'get', '/domains', auth_headers(ADMIN_TOKEN))
 
 
 def create_domain(name):
@@ -46,8 +76,7 @@ def create_domain(name):
                 'name': name
             }
         }
-    resp = requests.post('{}/domains'.format(KEYSTONE_URL), json.dumps(body), headers=auth_headers(ADMIN_TOKEN))
-    return json.loads(resp.text)
+    return service_request(KEYSTONE_URL, 'post', '/domains', auth_headers(ADMIN_TOKEN), body)
 
 
 def create_project(name, domain_id):
@@ -59,13 +88,11 @@ def create_project(name, domain_id):
                 'enabled': True
             }
         }
-    resp = requests.post('{}/projects'.format(KEYSTONE_URL), json.dumps(body), headers=auth_headers(ADMIN_TOKEN))
-    return json.loads(resp.text)
+    return service_request(KEYSTONE_URL, 'post', '/projects', auth_headers(ADMIN_TOKEN), body)
 
 
 def get_projects():
-    resp = requests.get('{}/projects'.format(KEYSTONE_URL), headers=auth_headers(ADMIN_TOKEN))
-    return json.loads(resp.text)
+    return service_request(KEYSTONE_URL, 'get', '/projects', auth_headers(ADMIN_TOKEN))
 
 
 def create_user(username, password, domain_id, project):
@@ -78,39 +105,31 @@ def create_user(username, password, domain_id, project):
                 'default_project': project
             }
         }
-
-    resp = requests.post('{}/users'.format(KEYSTONE_URL), json.dumps(body), headers=auth_headers(ADMIN_TOKEN))
-    return json.loads(resp.text)
+    return service_request(KEYSTONE_URL, 'post', '/users', auth_headers(ADMIN_TOKEN), body)
 
 
-def delete_user(id):
-    resp = requests.delete('{}/users/{}'.format(KEYSTONE_URL, id), headers=auth_headers(ADMIN_TOKEN))
-    return json.loads(resp.text)
+def delete_user(user_id):
+    return service_request(KEYSTONE_URL, 'delete', '/users/{}'.format(user_id), auth_headers(ADMIN_TOKEN))
 
 
 def get_users():
-    resp = requests.get('{}/users'.format(KEYSTONE_URL), headers=auth_headers(ADMIN_TOKEN))
-    return resp.text
+    return service_request(KEYSTONE_URL, 'get', '/users', auth_headers(ADMIN_TOKEN))
 
 
-def get_user_roles(id):
-    resp = requests.get('{}/users/{}/roles'.format(KEYSTONE_URL, id), headers=auth_headers(ADMIN_TOKEN))
-    return json.loads(resp.text)
+def get_user_roles(user_id):
+    return service_request(KEYSTONE_URL, 'get', '/users/{}/roles'.format(user_id), auth_headers(ADMIN_TOKEN))
 
 
-def get_user_roles_in_project(project, user):
-    resp = requests.get('{}/projects/{}/users/{}/roles'.format(KEYSTONE_URL, project, user), headers=auth_headers(ADMIN_TOKEN))
-    return json.loads(resp.text)
+def get_user_roles_in_project(tenant_id, user_id):
+    return service_request(KEYSTONE_URL, 'get', '/projects/{}/users/{}/roles'.format(tenant_id, user_id), auth_headers(ADMIN_TOKEN))
 
 
-def grant_user_role_in_project(project, user, role):
-    resp = requests.put('{}/projects/{}/users/{}/roles/{}'.format(KEYSTONE_URL, project, user, role), headers=auth_headers(ADMIN_TOKEN))
-    return resp.text
+def grant_user_role_in_project(tenant_id, user_id, role_id):
+    return service_request(KEYSTONE_URL, 'put', '/projects/{}/users/{}/roles/{}'.format(tenant_id, user_id, role_id), auth_headers(ADMIN_TOKEN))
 
 
 def get_roles():
-    resp = requests.get('{}/roles'.format(KEYSTONE_URL), headers=auth_headers(ADMIN_TOKEN))
-    return json.loads(resp.text)
+    return service_request(KEYSTONE_URL, 'get', '/roles', auth_headers(ADMIN_TOKEN))
 
 
 def get_token(username, password, domain, project):
@@ -141,9 +160,7 @@ def get_token(username, password, domain, project):
                 }
             }
         }
-
-    resp = requests.post('{}/auth/tokens'.format(KEYSTONE_URL), json.dumps(body), headers=HEADERS)
-    return resp.headers
+    return service_request(KEYSTONE_URL, 'post', '/auth/tokens', HEADERS, body)
 
 
 def create_network(token, name):
@@ -153,9 +170,7 @@ def create_network(token, name):
                 'name': name
             }
         }
-
-    resp = requests.post('{}/networks'.format(NEUTRON_URL), json.dumps(body), headers=auth_headers(token))
-    return json.loads(resp.text)
+    return service_request(NEUTRON_URL, 'post', '/networks', auth_headers(token), body)
 
 
 def create_subnet(token, network_id):
@@ -169,24 +184,20 @@ def create_subnet(token, network_id):
                 'network_id': network_id
             }
         }
-
-    resp = requests.post('{}/subnets'.format(NEUTRON_URL), json.dumps(body), headers=auth_headers(token))
-    return json.loads(resp.text)
+    return service_request(NEUTRON_URL, 'post', '/subnets', auth_headers(token), body)
 
 
-def create_router(token, name, gw_network_id):
+def create_router(token, name, network_id):
     body = \
         {
             'router': {
                 'name': name,
                 'external_gateway_info': {
-                    'network_id': gw_network_id
+                    'network_id': network_id
                 }
             }
         }
-
-    resp = requests.post('{}/routers'.format(NEUTRON_URL), json.dumps(body), headers=auth_headers(token))
-    return json.loads(resp.text)
+    return service_request(NEUTRON_URL, 'post', '/routers', auth_headers(token), body)
 
 
 def add_router_interface(token, router_id, subnet_id):
@@ -194,9 +205,7 @@ def add_router_interface(token, router_id, subnet_id):
         {
             'subnet_id': subnet_id
         }
-
-    resp = requests.put('{}/routers/{}/add_router_interface'.format(NEUTRON_URL, router_id), json.dumps(body), headers=auth_headers(token))
-    return json.loads(resp.text)
+    return service_request(NEUTRON_URL, 'put', '/routers/{}/add_router_interface'.format(router_id), auth_headers(token), body)
 
 
 def create_keypair(token, tenant_id, name):
@@ -206,17 +215,15 @@ def create_keypair(token, tenant_id, name):
                 'name': name
             }
         }
-
-    resp = requests.post('{}/{}/os-keypairs'.format(NOVA_URL, tenant_id), json.dumps(body), headers=auth_headers(token))
-    return json.loads(resp.text)
+    return service_request(NOVA_URL, 'post', '/{}/os-keypairs'.format(tenant_id), auth_headers(token), body)
 
 
-def create_instance(token, tenant_id, flavor, image, name, network_id):
+def create_instance(token, name, tenant_id, flavor_id, image_id, network_id):
     body = \
         {
             'server': {
-                'flavorRef': flavor,
-                'imageRef': image,
+                'flavorRef': flavor_id,
+                'imageRef': image_id,
                 'name': name,
                 'networks': [
                     {
@@ -225,14 +232,11 @@ def create_instance(token, tenant_id, flavor, image, name, network_id):
                 ]
             }
         }
-
-    resp = requests.post('{}/{}/servers'.format(NOVA_URL, tenant_id), json.dumps(body), headers=auth_headers(token))
-    return json.loads(resp.text)
+    return service_request(NOVA_URL, 'post', '/{}/servers'.format(tenant_id), auth_headers(token), body)
 
 
 def get_instance(token, tenant_id, instance_id):
-    resp = requests.get('{}/{}/servers/{}'.format(NOVA_URL, tenant_id, instance_id), headers=auth_headers(token))
-    return json.loads(resp.text)
+    return service_request(NOVA_URL, 'get', '/{}/servers/{}'.format(tenant_id, instance_id), auth_headers(token))
 
 
 def create_volume(token, tenant_id, name, size):
@@ -243,22 +247,19 @@ def create_volume(token, tenant_id, name, size):
                 'size': size
             }
         }
-
-    resp = requests.post('{}/{}/volumes'.format(CINDER_URL, tenant_id), json.dumps(body), headers=auth_headers(token))
-    return json.loads(resp.text)
+    return service_request(CINDER_URL, 'post', '/{}/volumes'.format(tenant_id), auth_headers(token), body)
 
 
 def attach_volume(token, tenant_id, instance_id, volume_id):
     body = \
         {
             'volumeAttachment': {
-                'volumeId': volume_id
+                'volumeId': volume_id,
+                'device': '/dev/vdd'
+                          ''
             }
         }
-
-    resp = requests.post('{}/{}/servers/{}/os-volume_attachments'.format(NOVA_URL, tenant_id, instance_id), json.dumps(body), headers=auth_headers(token))
-    return json.loads(resp.text)
-
+    return service_request(NOVA_URL, 'post', '/{}/servers/{}/os-volume_attachments'.format(tenant_id, instance_id), auth_headers(token), body)
 
 
 suffix = repr(random.random())[2:]
@@ -273,74 +274,62 @@ INSTANCE = 'my_inst_{}'.format(suffix)
 VOLUME   = 'my_volu_{}'.format(suffix)
 
 print \
-    'DOMAIN: {}\n' \
-    'PROJECT: {}\n' \
-    'USER: {}\n' \
+    'DOMAIN:   {}\n' \
+    'PROJECT:  {}\n' \
+    'USER:     {}\n' \
     'PASSWORD: 123qwe\n' \
-    'NETWORK: {}\n' \
-    'ROUTER: {}\n' \
-    'KEYPAIR: {}\n' \
+    'NETWORK:  {}\n' \
+    'ROUTER:   {}\n' \
+    'KEYPAIR:  {}\n' \
     'INSTANCE: {}\n' \
-    'VOLUME: {}\n'.format(DOMAIN, PROJECT, USER, NETWORK, ROUTER, KEYPAIR, INSTANCE, VOLUME)
+    'VOLUME:   {}\n'.format(DOMAIN, PROJECT, USER, NETWORK, ROUTER, KEYPAIR, INSTANCE, VOLUME)
 
 # Create domain
-domain_id = create_domain(DOMAIN)['domain']['id']
-print 'DOMAIN ID: {}'.format(domain_id)
+domain_id = create_domain(DOMAIN)['body']['domain']['id']
 
 # Create project
-project_id = create_project(PROJECT, domain_id)['project']['id']
-print 'PROJECT ID: {}'.format(project_id)
+tenant_id = create_project(PROJECT, domain_id)['body']['project']['id']
 
 # Create user
-user_id = create_user(USER, '123qwe', domain_id, PROJECT)['user']['id']
-print 'USER ID: {}'.format(user_id)
+user_id = create_user(USER, '123qwe', domain_id, PROJECT)['body']['user']['id']
 
 # Assign role to user
-roles = get_roles()['roles']
+roles = get_roles()['body']['roles']
 for role in roles:
     if role['name'] == '_member_':
         member_role_id = role['id']
-print 'MEMBER ROLE ID: {}'.format(member_role_id)
-grant_user_role_in_project(project_id, user_id, member_role_id)
+grant_user_role_in_project(tenant_id, user_id, member_role_id)
 
 # Get token
-token = get_token(USER, '123qwe', DOMAIN, PROJECT)['x-subject-token']
-print 'TOKEN: {}'.format(token)
+token = get_token(USER, '123qwe', DOMAIN, PROJECT)['headers']['x-subject-token']
 
 # Create network
-network_id = create_network(token, NETWORK)['network']['id']
-print 'NETWORK ID: {}'.format(network_id)
+network_id = create_network(token, NETWORK)['body']['network']['id']
 
 # Create subnet
-subnet_id = create_subnet(token, network_id)['subnet']['id']
-print 'SUBNET_ID: {}'.format(subnet_id)
+subnet_id = create_subnet(token, network_id)['body']['subnet']['id']
 
 # Create router
-router_id = create_router(token, ROUTER, EXTERNAL_NETWORK_ID)['router']['id']
-print 'ROUTER_ID: {}'.format(router_id)
+router_id = create_router(token, ROUTER, EXTERNAL_NETWORK_ID)['body']['router']['id']
 
 # Add router interface for internal network
-interface_id = add_router_interface(token, router_id, subnet_id)['id']
-print 'INTERFACE_ID: {}'.format(interface_id)
+interface_id = add_router_interface(token, router_id, subnet_id)['body']['id']
 
 # Create keypair
-keypair_name = create_keypair(token, project_id, KEYPAIR)['keypair']['name']
-print 'KEYPAIR NAME: {}'.format(keypair_name)
+keypair_name = create_keypair(token, tenant_id, KEYPAIR)['body']['keypair']['name']
 
 # Create instance
-instance_id = create_instance(token, project_id, FLAVOR_ID, IMAGE_ID, INSTANCE, network_id)['server']['id']
-print 'INSTANCE ID: {}'.format(instance_id)
+instance_id = create_instance(token, INSTANCE, tenant_id, FLAVOR_ID, IMAGE_ID, network_id)['body']['server']['id']
 
-# Show instance details
-print get_instance(token, project_id, instance_id)
-
-# Create volume
-volume_id = create_volume(token, project_id, VOLUME, 2)['volume']['id']
-print 'VOLUME ID: {}'.format(volume_id)
-
-# Wait for the instance to finish building
+# Wait for the instance to build
+print 'Waiting 10 seconds for the instance to finish building'
 time.sleep(10)
 
+# Show instance details
+get_instance(token, tenant_id, instance_id)
+
+# Create volume
+volume_id = create_volume(token, tenant_id, VOLUME, 2)['body']['volume']['id']
+
 # Attach volume to instance
-volume_attach_response = attach_volume(token, project_id, instance_id, volume_id)
-print volume_attach_response
+attach_volume(token, tenant_id, instance_id, volume_id)
