@@ -2,6 +2,7 @@ import json
 import random
 import time
 import sys
+import traceback
 
 import requests
 from colorama import Fore
@@ -39,7 +40,9 @@ NETWORK = 'network_{}'.format(suffix)
 ROUTER = 'router_{}'.format(suffix)
 KEYPAIR = 'keypair_{}'.format(suffix)
 INSTANCE = 'instance_{}'.format(suffix)
+INSTANCE_SNAPSHOT = 'instance_snap_{}'.format(suffix)
 VOLUME = 'volume_{}'.format(suffix)
+VOLUME_SNAPSHOT = 'volume_snap_{}'.format(suffix)
 
 
 def sleep(seconds):
@@ -52,6 +55,9 @@ def sleep(seconds):
 
 
 def service_request(service_endpoint, method, path, headers, body=None):
+    method_name = traceback.extract_stack(limit=2)[-2][2]
+    action = method_name.replace('_', ' ').upper()
+    print(Fore.YELLOW + '##### {} #####'.format(action) + Fore.RESET)
     print '=== R E Q U E S T ===\n' \
           'METHOD:  {}\n' \
           'URL:     {}\n' \
@@ -338,6 +344,21 @@ def attach_volume(token, project_id, instance_id, volume_id):
                            auth_headers(token), body)
 
 
+def create_instance_snapshot(token, project_id, instance_id, name):
+    body = \
+        {
+            'createImage': {
+                'name': name
+            }
+        }
+    return service_request(NOVA_URL, 'post', '/{}/servers/{}/action'.format(project_id, instance_id),
+                           auth_headers(token), body)
+
+
+def delete_image(token, image_id):
+    return service_request(NOVA_URL, 'delete', '/images/{}'.format(image_id), auth_headers(token))
+
+
 # CINDER
 
 def create_volume(token, project_id, name, size):
@@ -351,8 +372,25 @@ def create_volume(token, project_id, name, size):
     return service_request(CINDER_URL, 'post', '/{}/volumes'.format(project_id), auth_headers(token), body)
 
 
-def delete_volume(token, project_id, volume_id):
-    return service_request(CINDER_URL, 'delete', '/{}/volumes/{}'.format(project_id, volume_id), auth_headers(token))
+def delete_volume(token, project_id, volume_snaphot_id):
+    return service_request(CINDER_URL, 'delete', '/{}/volumes/{}'.format(project_id, volume_snaphot_id),
+                           auth_headers(token))
+
+
+def create_volume_snapshot(token, project_id, volume_id, name):
+    body = \
+        {
+            'snapshot': {
+                'name': name,
+                'volume_id': volume_id
+            }
+        }
+    return service_request(CINDER_URL, 'post', '/{}/snapshots'.format(project_id), auth_headers(token),
+                           body)
+
+
+def delete_volume_snapshot(token, project_id, volume_id):
+    return service_request(CINDER_URL, 'delete', '/{}/snapshots/{}'.format(project_id, volume_id), auth_headers(token))
 
 
 # GLANCE
@@ -410,6 +448,13 @@ keypair_name = create_keypair(token, project_id, KEYPAIR)['body']['keypair']['na
 # Create volume
 volume_id = create_volume(token, project_id, VOLUME, 1)['body']['volume']['id']
 
+# Wait for the volume to build
+print 'Waiting for the volume to finish building'
+sleep(5)
+
+# Create volume snapshot
+volume_snapshot_id = create_volume_snapshot(token, project_id, volume_id, VOLUME_SNAPSHOT)['body']['snapshot']['id']
+
 # Create instance
 instance_id = create_instance(token, INSTANCE, project_id, FLAVOR_ID, IMAGE_ID, network_id)['body']['server']['id']
 
@@ -423,9 +468,25 @@ get_instance(token, project_id, instance_id)
 # Attach volume to instance
 attach_volume(token, project_id, instance_id, volume_id)
 
-print '##### CLEANING UP #####'
+# Create instance snapshot
+instance_snapshot_id = \
+    create_instance_snapshot(token, project_id, instance_id, INSTANCE_SNAPSHOT)['headers']['location'].split('/')[-1]
 
+# Wait for the snapshot to build
+print 'Waiting for the snapshot to finish building'
+sleep(5)
+
+print(Fore.BLUE + '-----------------------\n' \
+                  '----- CLEANING UP -----\n' \
+                  '-----------------------\n' + \
+    Fore.RESET)
+
+
+delete_volume_snapshot(token, project_id, volume_snapshot_id)
+print 'Waiting for the snapshot to disappear'
+sleep(5)
 delete_volume(token, project_id, volume_id)  # add 'volume_clear=none' to cinder.conf
+delete_image(token, instance_snapshot_id)
 delete_instance(token, project_id, instance_id)
 print 'Waiting for the instance to disappear'
 sleep(5)
